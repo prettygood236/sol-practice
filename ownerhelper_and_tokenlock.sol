@@ -40,6 +40,9 @@ library SafeMath {
 
 abstract contract OwnerHelper {
   	address private _owner;
+    address[3] private _owners;
+    mapping(address => uint8) private voteResult;
+    mapping(address => uint8) private voteCount;
 
   	event OwnershipTransferred(address indexed preOwner, address indexed nextOwner);
 
@@ -50,32 +53,71 @@ abstract contract OwnerHelper {
 
   	constructor() {
             _owner = msg.sender;
+            _owners[0] = msg.sender;
+            voteCount[msg.sender] = 0;
+            voteResult[msg.sender] =0;
   	}
 
-       function owner() public view virtual returns (address) {
-           return _owner;
-       }
+    function owner() public view virtual returns (address) {
+        return _owner;
+    }
+    function addOwner (uint8 _ownerNumber,address _newOwner) onlyOwner public returns(bool) { //오너투표에 참여할 사람들 입력 0~2
+        require(_ownerNumber>0 &&_ownerNumber<3);
+        _owners[_ownerNumber] = _newOwner;
+        voteCount[_newOwner] = 0;
+        voteResult[_newOwner] =0;
+        return true;
+    }
+    function voteForOwner(address _voteforAddress) public virtual returns(bool){
+       _voteforOwner(msg.sender,_voteforAddress);
+        return true;
+    }
 
-  	function transferOwnership(address newOwner) onlyOwner public {
-            require(newOwner != _owner);
-            require(newOwner != address(0x0));
+    function _voteforOwner(address sender, address voteforAddress) internal virtual returns (bool){
+        require(_owners[0]==sender || _owners[1]==sender || _owners[2]==sender);
+        require(voteCount[sender] == 0);
+        voteResult[voteforAddress]+=1;
+        voteCount[sender]+=1;
+        return true;
+    }
+
+    function result() public view returns (uint8){
+        return voteResult[msg.sender];
+    }
+
+
+    function transferOwnership() onlyOwner public returns (bool) {
+
+            if(voteResult[_owners[1]] > voteResult[_owners[2]]){
+            require(_owners[1] != _owner);
+            require(_owners[1] != address(0x0));
             address preOwner = _owner;
-    	    _owner = newOwner;
-    	    emit OwnershipTransferred(preOwner, newOwner);
-  	}
+            _owner = _owners[1];
+            emit OwnershipTransferred(preOwner, _owners[1]);
+            }
+            else if(voteResult[_owners[2]] > voteResult[_owners[0]]){
+            require(_owners[2] != _owner);
+            require(_owners[2] != address(0x0));
+            address preOwner = _owner;
+            _owner = _owners[2];
+            emit OwnershipTransferred(preOwner, _owners[2]);
+            }
+    return true;
+    }
 }
+
 
 contract SimpleToken is ERC20Interface, OwnerHelper {
     using SafeMath for uint256;
     mapping (address => uint256) private _balances;
     mapping (address => mapping (address => uint256)) public _allowances;
+    mapping (address => bool) public _personalTokenLock;
 
     uint256 public _totalSupply;
     string public _name;
     string public _symbol;
     uint8 public _decimals;
     bool public _tokenLock;
-    mapping (address => bool) public _personalTokenLock;
 
     constructor(string memory getName, string memory getSymbol) {
         _name = getName;
@@ -117,7 +159,9 @@ contract SimpleToken is ERC20Interface, OwnerHelper {
     }
     
     function approve(address spender, uint256 amount) external virtual override returns (bool) {
-        _approve(msg.sender, spender, amount);
+        uint256 currentAllownace = _allowances[msg.sender][spender];
+        require(currentAllownace >= amount, "ERC20: Transfer amount exceeds allowance");
+        _approve(msg.sender, spender, currentAllownace, amount);
         return true;
     }
     
